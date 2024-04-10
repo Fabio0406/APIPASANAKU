@@ -1,6 +1,8 @@
 import { consul } from "../db.js"
 import { transporter } from "./correo.js"
 import client from "./whatsapp.js"
+import QRcode from "qrcode"
+import fs from "fs"
 
 export const getCliente = async (req, res) => {
     try {
@@ -57,7 +59,8 @@ export const invitar = async (req, res) => {
             from: 'fabioarredondo44@gmail.com',
             to: correo,
             subject: 'PASANAKU',
-            text: datos.rows[0].lider_partida + " te invitó a la partida: " + datos.rows[0].titulo_partida + "\nLos pagos de esta partida son de " + pagos +" "+datos.rows[0].tipomoneda + " cada " + datos.rows[0].tiempopago + "\nHaz clic aquí para unirte a la partida: [Link de invitación]\no escanea el código QR[qr]\nSi aún no tienes la aplicación de Pasanaku,\npuedes descargarla desde el siguiente enlace: [link de descarga]"
+            text: datos.rows[0].lider_partida + " te invitó a la partida: " + datos.rows[0].titulo_partida + "\nLos pagos de esta partida son de " + pagos + " " + datos.rows[0].tipomoneda + " cada " + datos.rows[0].tiempopago + "\nHaz clic aquí para unirte a la partida: [Link de invitación]\nSi aún no tienes la aplicación de Pasanaku,\npuedes escanea el código QR[qr]",
+            html: "<img src=\"/image/qrcode.png\"></img>"
         };
         transporter.sendMail(mailOptions, function (error, info) {
             if (error) {
@@ -67,10 +70,14 @@ export const invitar = async (req, res) => {
             }
         });
 
+
+
         const numeroDestinatario = '591' + telefono.toString(); // Reemplaza con el número del destinatario
         const chatId = numeroDestinatario + "@c.us";
-        const message = "PASANAKU\n" + datos.rows[0].lider_partida + " te invitó a la partida: " + datos.rows[0].titulo_partida + "\nLos pagos de esta partida son de " + pagos +" "+datos.rows[0].tipomoneda + " cada " + datos.rows[0].tiempopago + "\nHaz clic aquí para unirte a la partida: [Link de invitación]\no escanea el código QR[qr]\nSi aún no tienes la aplicación de Pasanaku,\npuedes descargarla desde el siguiente enlace: [link de descarga]"
+        const message = "PASANAKU\n" + datos.rows[0].lider_partida + " te invitó a la partida: " + datos.rows[0].titulo_partida + "\nLos pagos de esta partida son de " + pagos + " " + datos.rows[0].tipomoneda + " cada " + datos.rows[0].tiempopago + "\nHaz clic aquí para unirte a la partida: [Link de invitación]\nSi aún no tienes la aplicación de Pasanaku,\npuedes escanear el código QR a continuación:"
         client.sendMessage(chatId, message);
+        const media = MessageMedia.fromFilePath('/image/qrcode.png');
+        client.sendMessage(chatId, media);
         res.status(200).json(resp.command)
     } catch (error) {
         res.send(error)
@@ -100,7 +107,7 @@ export const getPartidas = async (req, res) => {
 
 export const getNotificaciones = async (req, res) => {
     try {
-        const resp = await consul.query('SELECT * FROM partida WHERE id IN (SELECT id_partida FROM participante WHERE id_user = $1 AND id_rol = (SELECT id FROM rol WHERE id = $2))', [req.params.usser, 1])
+        const resp = await consul.query('SELECT invitado.id, invitado.correo, invitado.telefono, invitado.id_partida, estado.nombre AS estado FROM invitado JOIN estado ON invitado.id_estado = estado.id WHERE EXISTS (SELECT 1 FROM usuario WHERE usuario.correo = invitado.correo AND usuario.telefono = invitado.telefono AND usuario.usser = $1);', [req.params.usser])
         res.status(200).json(resp.rows)
     } catch (error) {
         res.send(error)
@@ -169,6 +176,19 @@ export const updatecuentas = async (req, res) => {
     try {
         const { nombre, contraseña, correo, telefono } = req.body
         const resp = await consul.query('UPDATE usuario SET nombre = $1, contraseña = $2, correo = $3, telefono = $4 WHERE usser = $5', [nombre, contraseña, correo, telefono, req.params.usser])
+        res.send(resp.command)
+    } catch (error) {
+        res.send(error)
+    }
+}
+
+export const cambiarestado = async (req, res) => {
+    try {
+        const { usser, estado, id_partida, id_invitacion } = req.params
+        const resp = await consul.query('UPDATE invitado SET id_estado = $1 WHERE id = $2;', [estado, id_invitacion])
+        if (estado = 3) {
+            const insertP = await consul.query('INSERT INTO participante (id_user, id_partida, id_rol) VALUES ($1,$2,$3)', [usser, id_partida, 2])
+        }
         res.send(resp.command)
     } catch (error) {
         res.send(error)
