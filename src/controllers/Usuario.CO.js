@@ -43,6 +43,7 @@ export const logincliente = async (req, res) => {
             res.status(200).json(resp.rows)
         }
     } catch (error) {
+        console.log(error)
         res.send(error)
     }
 }
