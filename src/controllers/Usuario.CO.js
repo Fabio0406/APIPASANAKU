@@ -15,8 +15,8 @@ export const getCliente = async (req, res) => {
 
 export const post = async (req, res) => {
     try {   
-        const HOLA = 'si hace post'     
-        res.status(200).json(HOLA)
+        const resp = await consul.query('SELECT * FROM usuario ')    
+        res.status(200).json(resp.rows)
     } catch (error) {
         res.send(error)
     }
