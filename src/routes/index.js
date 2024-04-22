@@ -27,7 +27,7 @@ router.post('/api/login', logincliente)
 
 router.post('/api/invitar', invitar)
 
-router.post('/api/post', post)
+router.get('/api/post', post)
 
 router.get('/api/notificacion/:usser',getNotificaciones)
 

@@ -2,7 +2,6 @@ import { consul } from "../db.js"
 import { transporter } from "./correo.js"
 /* import client from "./whatsapp.js"
 import QRcode from "qrcode" */
-import fs from "fs"
 
 export const getCliente = async (req, res) => {
     try {
