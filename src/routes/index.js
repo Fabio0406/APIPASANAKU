@@ -31,4 +31,6 @@ router.get('/api/notificacion/:usser',getNotificaciones)
 
 router.post('/api/estadoinvitacion/:usser/:id_partida/:id_invitacion/:estado',cambiarestado)
 
+
+
 export default router

@@ -55,12 +55,17 @@ export const invitar = async (req, res) => {
         const resp = await consul.query('INSERT INTO invitado (correo, telefono,id_partida,id_estado) VALUES ($1,$2,$3,$4)', [correo, telefono, id_partida, id_estado])
         const datos = await consul.query('SELECT p.titulo AS titulo_partida, u.nombre AS lider_partida, p.montotal AS montototal, p.tiempopago, p.participantes, p.tipomoneda FROM partida p INNER JOIN participante par ON p.id = par.id_partida INNER JOIN usuario u ON par.id_user = u.usser WHERE p.id = $1;', [id_partida])
         const pagos = datos.rows[0].montototal / datos.rows[0].participantes
-        var mailOptions = {
-            from: 'fabioarredondo44@gmail.com',
-            to: correo,
-            subject: 'PASANAKU',
-            text: datos.rows[0].lider_partida + " te invitó a la partida: " + datos.rows[0].titulo_partida + "\nLos pagos de esta partida son de " + pagos + " " + datos.rows[0].tipomoneda + " cada " + datos.rows[0].tiempopago + "\nHaz clic aquí para unirte a la partida: [Link de invitación]\nSi aún no tienes la aplicación de Pasanaku,\npuedes escanea el código QR[qr]",
-            html: "<img src=\"/image/qrcode.png\"></img>"
+        const mensaje = datos.rows[0].lider_partida + " te invitó a la partida: " + datos.rows[0].titulo_partida + "\nLos pagos de esta partida son de " + pagos + " " + datos.rows[0].tipomoneda + " cada " + datos.rows[0].tiempopago + "\nHaz clic aquí para unirte a la partida: [Link de invitación]\nSi aún no tienes la aplicación de Pasanaku,\npuedes escanear el código QR a continuación:"
+        let mailOptions = {
+            from: 'fabioarredondo44@gmail.com', // Tu dirección de correo electrónico
+            to: correo, // Dirección de correo electrónico del destinatario
+            subject: 'PASANAKU', // Asunto del correo
+            html: '<p>' + mensaje + '</p><img src="cid:imagen1"/>', // Contenido HTML del correo con la imagen incrustada
+            attachments: [{
+                filename: 'imagen.png', // Nombre del archivo adjunto
+                path: './src/public/image/qrcode.png', // Ruta de la imagen en tu sistema
+                cid: 'imagen1' // ID de la imagen para ser utilizada en el contenido HTML
+            }]
         };
         transporter.sendMail(mailOptions, function (error, info) {
             if (error) {
@@ -69,15 +74,12 @@ export const invitar = async (req, res) => {
                 console.log('Correo enviado: ' + info.response);
             }
         });
-
-
-
-        const numeroDestinatario = '591' + telefono.toString(); // Reemplaza con el número del destinatario
+       
+        /* const numeroDestinatario = '591' + telefono.toString(); // Reemplaza con el número del destinatario
         const chatId = numeroDestinatario + "@c.us";
-        const message = "PASANAKU\n" + datos.rows[0].lider_partida + " te invitó a la partida: " + datos.rows[0].titulo_partida + "\nLos pagos de esta partida son de " + pagos + " " + datos.rows[0].tipomoneda + " cada " + datos.rows[0].tiempopago + "\nHaz clic aquí para unirte a la partida: [Link de invitación]\nSi aún no tienes la aplicación de Pasanaku,\npuedes escanear el código QR a continuación:"
-        client.sendMessage(chatId, message);
-        const media = MessageMedia.fromFilePath('/image/qrcode.png');
-        client.sendMessage(chatId, media);
+        const message = "PASANAKU\n" + mensaje
+        client.sendMessage(chatId, message); */
+        
         res.status(200).json(resp.command)
     } catch (error) {
         res.send(error)

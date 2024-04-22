@@ -1,4 +1,4 @@
-import pkg from 'whatsapp-web.js';
+/* import pkg from 'whatsapp-web.js';
 const { Client,LocalAuth } = pkg;
 import qrcode from 'qrcode-terminal'
 
@@ -29,3 +29,4 @@ client.initialize();
 
 
 export default client
+ */
