@@ -13,6 +13,16 @@ export const getCliente = async (req, res) => {
     }
 }
 
+export const post = async (req, res) => {
+    try {   
+        const HOLA = 'si hace post'     
+        res.status(200).json(HOLA)
+    } catch (error) {
+        res.send(error)
+    }
+}
+
+
 export const createCliente = async (req, res) => {
     try {
         const { usser, nombre, contrasena, correo, telefono } = req.body

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { cambiarestado, createCliente, createCuentas, createPartidas, deletecuenta, getCliente, getCuentas, getInvitados, getNotificaciones, getPartidas, invitar, logincliente, updatecuentas, updateusser } from "../controllers/Usuario.CO.js";
+import { cambiarestado, createCliente, createCuentas, createPartidas, deletecuenta, getCliente, getCuentas, getInvitados, getNotificaciones, getPartidas, invitar, logincliente, post, updatecuentas, updateusser } from "../controllers/Usuario.CO.js";
 
 const router = Router()
 
@@ -26,6 +26,8 @@ router.put('/api/edit/:usser',updateusser)
 router.post('/api/login', logincliente)
 
 router.post('/api/invitar', invitar)
+
+router.post('/api/post', post)
 
 router.get('/api/notificacion/:usser',getNotificaciones)
 
