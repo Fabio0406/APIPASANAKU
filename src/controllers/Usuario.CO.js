@@ -12,16 +12,6 @@ export const getCliente = async (req, res) => {
     }
 }
 
-export const post = async (req, res) => {
-    try {   
-        const resp = await consul.query('SELECT * FROM usuario ')    
-        res.status(200).json(resp.rows)
-    } catch (error) {
-        res.send(error)
-    }
-}
-
-
 export const createCliente = async (req, res) => {
     try {
         const { usser, nombre, contrasena, correo, telefono } = req.body
@@ -84,12 +74,29 @@ export const invitar = async (req, res) => {
                 console.log('Correo enviado: ' + info.response);
             }
         });
-       
+
         /* const numeroDestinatario = '591' + telefono.toString(); // Reemplaza con el número del destinatario
         const chatId = numeroDestinatario + "@c.us";
         const message = "PASANAKU\n" + mensaje
         client.sendMessage(chatId, message); */
-        
+
+       /*  // Supongamos que 'user' es el usuario al que quieres enviar la notificación
+        var message = {
+            notification: {
+                title: 'Título de la notificación',
+                body: 'Cuerpo de la notificación'
+            },
+            token: user.fcmToken // token del usuario específico
+        };
+
+        admin.messaging().send(message)
+            .then((response) => {
+                console.log('Notificación enviada correctamente:', response);
+            })
+            .catch((error) => {
+                console.log('Error al enviar la notificación:', error);
+            });
+ */
         res.status(200).json(resp.command)
     } catch (error) {
         res.send(error)
@@ -110,12 +117,13 @@ export const getCuentas = async (req, res) => {
 
 export const getPartidas = async (req, res) => {
     try {
-        const resp = await consul.query('SELECT * FROM partida WHERE id IN (SELECT id_partida FROM participante WHERE id_user = $1 AND id_rol = (SELECT id FROM rol WHERE id = $2))', [req.params.usser, 1])
+        const resp = await consul.query('SELECT partida.*, estado.nombre AS estado_nombre, COUNT(DISTINCT participante.id_user) AS cantidad_usuarios FROM partida INNER JOIN participante ON partida.id = participante.id_partida INNER JOIN estado ON partida.id_estado = estado.id WHERE partida.id IN (SELECT id_partida FROM participante WHERE id_user = $1 AND id_rol = $2) GROUP BY partida.id, estado.nombre;', [req.params.usser, 1])
         res.status(200).json(resp.rows)
     } catch (error) {
         res.send(error)
     }
 }
+
 
 export const getNotificaciones = async (req, res) => {
     try {
@@ -188,6 +196,16 @@ export const updatecuentas = async (req, res) => {
     try {
         const { nombre, contraseña, correo, telefono } = req.body
         const resp = await consul.query('UPDATE usuario SET nombre = $1, contraseña = $2, correo = $3, telefono = $4 WHERE usser = $5', [nombre, contraseña, correo, telefono, req.params.usser])
+        res.send(resp.command)
+    } catch (error) {
+        res.send(error)
+    }
+}
+
+export const UpdateToken = async (req, res) => {
+    try {
+        const { token } = req.body
+        const resp = await consul.query('UPDATE public.usuario SET token = $2 WHERE usser = $1;', [req.params.usser, token])
         res.send(resp.command)
     } catch (error) {
         res.send(error)
