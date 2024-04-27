@@ -12,6 +12,16 @@ export const getCliente = async (req, res) => {
     }
 }
 
+export const post = async (req, res) => {
+    try {   
+        const resp = await consul.query('SELECT * FROM usuario ')    
+        res.status(200).json(resp.rows)
+    } catch (error) {
+        res.send(error)
+    }
+}
+
+
 export const createCliente = async (req, res) => {
     try {
         const { usser, nombre, contrasena, correo, telefono } = req.body
@@ -74,29 +84,12 @@ export const invitar = async (req, res) => {
                 console.log('Correo enviado: ' + info.response);
             }
         });
-
+       
         /* const numeroDestinatario = '591' + telefono.toString(); // Reemplaza con el número del destinatario
         const chatId = numeroDestinatario + "@c.us";
         const message = "PASANAKU\n" + mensaje
         client.sendMessage(chatId, message); */
-
-       /*  // Supongamos que 'user' es el usuario al que quieres enviar la notificación
-        var message = {
-            notification: {
-                title: 'Título de la notificación',
-                body: 'Cuerpo de la notificación'
-            },
-            token: user.fcmToken // token del usuario específico
-        };
-
-        admin.messaging().send(message)
-            .then((response) => {
-                console.log('Notificación enviada correctamente:', response);
-            })
-            .catch((error) => {
-                console.log('Error al enviar la notificación:', error);
-            });
- */
+        
         res.status(200).json(resp.command)
     } catch (error) {
         res.send(error)
@@ -123,7 +116,6 @@ export const getPartidas = async (req, res) => {
         res.send(error)
     }
 }
-
 
 export const getNotificaciones = async (req, res) => {
     try {
@@ -216,7 +208,8 @@ export const cambiarestado = async (req, res) => {
     try {
         const { usser, estado, id_partida, id_invitacion } = req.params
         const resp = await consul.query('UPDATE invitado SET id_estado = $1 WHERE id = $2;', [estado, id_invitacion])
-        if (estado = 3) {
+        console.log(estado)
+        if (estado == 3) {
             const insertP = await consul.query('INSERT INTO participante (id_user, id_partida, id_rol) VALUES ($1,$2,$3)', [usser, id_partida, 2])
         }
         res.send(resp.command)
