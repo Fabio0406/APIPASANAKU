@@ -88,6 +88,8 @@ export const invitar = async (req, res) => {
         /* const numeroDestinatario = '591' + telefono.toString(); // Reemplaza con el número del destinatario
         const chatId = numeroDestinatario + "@c.us";
         const message = "PASANAKU\n" + mensaje
+
+        
         client.sendMessage(chatId, message); */
         
         res.status(200).json(resp.command)
