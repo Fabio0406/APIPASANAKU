@@ -15,7 +15,10 @@ app.use(express.json())
 app.use(express.urlencoded({extended: false}))
 const __dirname = dirname(fileURLToPath(import.meta.url))
 app.use(express.static(join(__dirname, 'public')))
-app.use(cors())
+app.use(cors(
+    origin= '*',
+    credentials= true,
+))
 
 
 
