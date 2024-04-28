@@ -1,9 +1,9 @@
 import pkg from 'pg'
 
 export const consul = new pkg.Pool({
-    host: process.env.DB_HOST ||'localhost',
+    host: process.env.DB_HOST ||'viaduct.proxy.rlwy.net',
     user: process.env.DB_USER ||'postgres',
-    password: process.env.DB_PASSWORD ||'Admin123',
-    database: process.env.DB_DATABASE ||'Pasanakku',
-    port: process.env.DB_PORT||'5432'
+    password: process.env.DB_PASSWORD ||'TrixWIoUdTOJcquXumRwoXOovAdjIqRs',
+    database: process.env.DB_DATABASE ||'railway',
+    port: process.env.DB_PORT||'50392'
 })

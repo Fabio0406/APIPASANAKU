@@ -1,6 +1,8 @@
 import { Router } from "express";
-import { UpdateToken, cambiarestado, createCliente, createCuentas, createPartidas, deletecuenta, getCliente, getCuentas, getInvitados, getNotificaciones, getPartidas, iniciar, invitar, logincliente, updatecuentas, updateusser } from "../controllers/Usuario.CO.js";
-
+import { UpdateQr, UpdateToken, cambiarestado, createCliente, createCuentas, createPartidas, deletecuenta, getCliente, getCuentas, getInvitados, getNotificaciones, getPartidas, getQr, getQrG, iniciar, invitar, logincliente, updatecuentas, updateusser } from "../controllers/Usuario.CO.js";
+import multer from 'multer'
+import {dirname, join} from 'path';
+import {fileURLToPath} from 'url';
 const router = Router()
 
 router.post('/api/register', createCliente)
@@ -35,6 +37,23 @@ router.post('/api/update/:usser',UpdateToken)//actualizar token
 
 router.post('/api/iniciar',iniciar)
 
+//----------------------------------------------------
+//--------------------Subir/Devolver QR---------------
+const __dirname = dirname(fileURLToPath(import.meta.url));
+export const storage = multer.diskStorage({
+    destination: (req,file,cb) => {
+        cb(null, join(__dirname,'../public/img'))
+    },
+    filename: (req,file,cb) =>{
+        const ext = file.originalname.split('.').pop()
+        cb(null,`${Date.now()}.${ext}`)
+    }
+})
+const upload = multer({storage})
+router.post('/api/subirQr/:usser',upload.single('qr'),UpdateQr)//subir o actualizar qr
+router.get('/api/getqr/:usser',getQr)// devuelve el qr de un usuario especifico
+router.get('/api/getqr/:id_partida/:turno',getQrG)// devuelve el qr del ganador de la partida y turno especifico
 
+//--------------------------------------------------------
 
 export default router

@@ -1,7 +1,15 @@
-import { consul } from "../db.js"
-import admin from "../index.js"
+import { consul } from "../db.js"// BASE DE DATOS
+import admin from "../index.js"// MANDAR NOTIFICACIONES
 import { transporter } from "./correo.js"
-import { scheduleJob, scheduledJobs } from "node-schedule"
+//-----------REALIZAR TAREAS CON TIEMPO-------
+import { scheduleJob } from "node-schedule"
+//--------------------------------------------
+//----------PARA PODER SUBIR QR--------
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
+import { unlink } from 'fs/promises';
+//---------------------------
 /* import client from "./whatsapp.js"
 import QRcode from "qrcode" */
 
@@ -229,7 +237,87 @@ export const UpdateToken = async (req, res) => {
         res.send(error)
     }
 }
+//-----------------------------------------------------------------
+//-------------------------Subir QR--------------------------------
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
+
+export const UpdateQr = async (req, res) => {
+    try {
+        const usuario = req.params.usser
+        const qr = await consul.query('SELECT qr IS NOT NULL AS tiene_qr, COALESCE(qr, \'\') AS valor_qr FROM public.usuario WHERE usser = $1;', [usuario])
+        if (qr.rows.length === 0) {
+            // Si no se encuentra ningún usuario con ese 'usser', devolvemos un 404
+            return res.status(404).json({ error: 'Usuario no encontrado' });
+        }
+        if (qr.rows[0].tiene_qr) {
+            // borrar imagen anterior
+            const qrAntiguo = join(__dirname, `../public/img/${qr.rows[0].valor_qr}`);
+            if (fs.existsSync(qrAntiguo)) {
+                await unlink(qrAntiguo)
+            }
+        }
+        const resp = await consul.query('UPDATE public.usuario SET qr = $1 WHERE usser = $2;', [req.file.filename, usuario])
+        res.send("Se ha subido correctamente")
+    } catch (error) {
+        res.send(error)
+    }
+}
+//---------------------------EnviarQr--------------------------------
+
+export const getQr = async (req, res) => {
+    try {
+        // Suponiendo que `consul` es un objeto para realizar consultas a una base de datos
+        const resp = await consul.query('SELECT * FROM usuario where usser = $1', [req.params.usser]);
+        if (resp.rows.length === 0) {
+            // Si no se encuentra ningún usuario con ese 'usser', devolvemos un 404
+            return res.status(404).json({ error: 'Usuario no encontrado' });
+        }
+        // Obtener la ruta completa de la imagen
+        const __dirname = dirname(fileURLToPath(import.meta.url));
+        const imagePath = join(__dirname, `../public/img/${resp.rows[0].qr}`);
+        // Verificar si la imagen existe en el sistema de archivos
+        if (fs.existsSync(imagePath)) {
+            // Si existe, enviar el archivo como respuesta
+            return res.sendFile(imagePath);
+        } else {
+            // Si la imagen no existe, enviar una imagen predeterminada
+            const defaultImagePath = join(__dirname, '../public/img/default.png');
+            return res.sendFile(defaultImagePath);
+        }
+    } catch (error) {
+        // Si hay un error durante la ejecución, devolver un 500
+        console.error('Error en la función getQr:', error);
+        return res.status(500).json({ error: 'Error interno del servidor' });
+    }
+};
+export const getQrG = async (req, res) => {
+    try {
+        // Suponiendo que `consul` es un objeto para realizar consultas a una base de datos
+        const resp = await consul.query('SELECT u.qr FROM public.usuario u JOIN public.oferta o ON u.usser = o.id_user JOIN public.participante p ON p.id_user = u.usser WHERE o.id_partida = $1 AND o.turno = $2 AND o.ganador = TRUE;', [req.params.id_partida, req.params.usser]);
+        if (resp.rows.length === 0) {
+            // Si no se encuentra ningún usuario con ese 'usser', devolvemos un 404
+            return res.status(404).json({ error: 'No hay ganador de ese turno' });
+        }
+        // Obtener la ruta completa de la imagen
+        const __dirname = dirname(fileURLToPath(import.meta.url));
+        const imagePath = join(__dirname, `../public/img/${resp.rows[0].qr}`);
+        // Verificar si la imagen existe en el sistema de archivos
+        if (fs.existsSync(imagePath)) {
+            // Si existe, enviar el archivo como respuesta
+            return res.sendFile(imagePath);
+        } else {
+            // Si la imagen no existe, enviar una imagen predeterminada
+            const defaultImagePath = join(__dirname, '../public/img/default.png');
+            return res.sendFile(defaultImagePath);
+        }
+    } catch (error) {
+        // Si hay un error durante la ejecución, devolver un 500
+        console.error('Error en la función getQr:', error);
+        return res.status(500).json({ error: 'Error interno del servidor' });
+    }
+};
+//-------------------------------------------------------------------
 export const cambiarestado = async (req, res) => {
     try {
         const { usser, estado, id_partida, id_invitacion } = req.params
@@ -263,8 +351,99 @@ export const deletecuenta = async (req, res) => {
 // 'partida.inicio' es la fecha de inicio de la partida, que debe ser un objeto de tipo Date
 // Crea un temporizador para esta partida
 function programarInicioPartida(partida) {
+    console.log("la partida iniciara : " + partida.fechainicio); // Imprime la fecha de inicio de la partida
+    let tarea = scheduleJob(partida.fechainicio, async function () {
+        const usuarios = await consul.query('SELECT u.* FROM public.participante p JOIN public.usuario u ON p.id_user = u.usser WHERE p.id_partida = $1', [partida.id])
+        var tokens = usuarios.rows.map(user => user.token);
+        var message = {
+            notification: {
+                title: 'La partida ' + partida.titulo + ' ha comenzado',
+                body: 'Ya puede hacer tu oferta para el turno '+partida.turno_actual+'!!'
+            },
+            tokens: tokens
+        };
+        Sendnotificaciones(message)         
+        TempoOferta(partida)
+    });
+    partidas[partida.id] = tarea;
+}
+function numeroAleatorio(min, max) {
+    // Generar un número aleatorio entre min (incluido) y max (incluido)
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+async function TempoOferta(partida) {
+    const tiempoDate = calcularInMin(partida.tiempooferta)
+    let tarea = scheduleJob(tiempoDate, async function () {
+        //obtener todos los participantes de una partida
+        const usuarios = await consul.query('SELECT u.* FROM public.participante p JOIN public.usuario u ON p.id_user = u.usser WHERE p.id_partida = $1', [partida.id])
+        var tokens = usuarios.rows.map(user => user.token);
+        var message = {
+            notification: {
+                title: 'partida ' + partida.titulo,
+                body: 'Concluyo el tiempo de oferta'
+            },
+            tokens: tokens
+        };
+        Sendnotificaciones(message)// manda notificacion a todos los participantes avisando que termino la oferta
+        // verifico si hubo alguna oferta si no hubo tiene que ser aleatorio la eleccion del ganador y que no haya ganado antes
+        const ganador = await consul.query('SELECT u.usser AS id_user, u.token, u.nombre, MAX(o.oferta) AS mayor_oferta FROM public.oferta o JOIN public.usuario u ON o.id_user = u.usser WHERE o.id_partida = $1 GROUP BY u.usser, u.token, u.nombre;', [partida.id])
+        var userG = ""
+        if (ganador.rowCount != 0) {// si hay ganador
+            userG = ganador.rows[0].token
+        } else {//no hay ganador asigna aleatorio
+            const ganadorA = await consul.query('SELECT u.* FROM public.usuario u LEFT JOIN (SELECT DISTINCT id_user FROM public.oferta WHERE id_partida = $1 AND ganador = TRUE) AS ganadores ON u.usser = ganadores.id_user WHERE ganadores.id_user IS NULL;', [partida.id])
+            const numero = numeroAleatorio(0, ganadorA.rowCount);
+            userG = ganadorA.rows[numero]
+        }
+        // aqui tendria que verificar el ganador        
+        message = {
+            notification: {
+                title: 'partida ' + partida.titulo,
+                body: 'has Ganado la oferta!'
+            },
+            token: userG.token
+        };
+        Sendnotifi(message)// manda notificacion al ganador
+        // verificar si el ganador tiene qr
+        const ganadorQR = await consul.query('SELECT CASE WHEN qr IS NOT NULL THEN TRUE ELSE FALSE END AS tiene_qr FROM public.usuario WHERE usser = $1;', [userG.usser])
+        // si tiene qr notificar a los demas que pueden hacer su pago 
+        if (ganadorQR.rows[0].tiene_qr) {
+            var message = {
+                notification: {
+                    title: 'partida ' + partida.titulo,
+                    body: 'El ganador subio su Qr ya puedes pagar'
+                },
+                tokens: tokens
+            };
+            Sendnotificaciones(message)// notificacion a todos para que hagan su pago ya hay qr
+        } else {// si no tiene, notificar al ganador que debe subir un qr
+            message = {
+                notification: {
+                    title: 'partida ' + partida.titulo,
+                    body: 'Sube tu QR para que te puedan abonar'
+                },
+                token: userG.token
+            };
+            Sendnotifi(message)// notificar que suba qr
+        }
+        // aqui deberia haber una verificacion para saber si es la ultima oferta o no
+        const resul = await consul.query('SELECT (SELECT COUNT(*) FROM public.participante WHERE id_partida = $1) - COUNT(DISTINCT o.turno) AS turnos_faltantes FROM public.oferta o WHERE o.id_partida = $1;', [partida.id])
+        const cantidad = resul.rows[0].turnos_faltantes
+        
+        if (cantidad != 0) {
+            TempoSigOferta(partida)
+        }else{
+            Tempofinalizar(partida)
+        }
+        //
+    });
+    partidas[partida.id] = tarea;
+}
+
+function TempoSigOferta(partida) {// tiempo para pagar
+    const tiempoDate = calcularInMin(partida.tiempopago)
     console.log("la partida iniciara : " + partida.inicio); // Imprime la fecha de inicio de la partida
-    let tarea = scheduleJob(partida.inicio, async function () {
+    let tarea = scheduleJob(tiempoDate, async function () {
         const usuarios = await consul.query('SELECT u.* FROM public.participante p JOIN public.usuario u ON p.id_user = u.usser WHERE p.id_partida = $1', [partida.id])
         var tokens = usuarios.rows.map(user => user.token);
         var message = {
@@ -275,39 +454,12 @@ function programarInicioPartida(partida) {
             tokens: tokens
         };
         Sendnotificaciones(message)
-        sigOferta(partida)
+        //actuaizo el turno
+        await consul.query('UPDATE public.partida SET turno_actual = turno_actual + 1 WHERE id = $1;'[partida.id])
+        const partN = consul.query('Select * from partida where id = $1',[partida.id])
+        partida = (await partN).rows[0]
+       TempoOferta(partida)
         console.log(`La partida ha comenzado!`);
-    });
-    partidas[partida.id] = tarea;
-}
-
-function sigOferta(partida) {
-    const tiempoDate = calcularInMin(partida.tiempooferta)
-    let tarea = scheduleJob(tiempoDate, async function () {
-        const usuarios = await consul.query('SELECT u.* FROM public.participante p JOIN public.usuario u ON p.id_user = u.usser WHERE p.id_partida = $1', [partida.id])
-        var tokens = usuarios.rows.map(user => user.token);
-        var message = {
-            notification: {
-                title: 'partida ' + partida.titulo ,
-                body: 'Concluyo el tiempo de oferta'
-            },
-            tokens: tokens
-        };
-        Sendnotificaciones(message)
-        // verifico si hubo alguna oferta si no hubo tiene que ser aleatorio la eleccion del ganador
-
-        // aqui tendria que verificar el ganador
-        message = {
-            notification: {
-                title: 'partida ' + partida.titulo ,
-                body: 'has Ganado la oferta!'
-            },
-            tokens: tokens
-        };
-        Sendnotifi(message)
-        // aqui deberia haber una verificacion para saber si es la ultima oferta o no
-        sigOferta(partida)
-        //
     });
     partidas[partida.id] = tarea;
 }
@@ -361,9 +513,9 @@ function tiempoRestanteS(partida) {
 }
 
 function Tiemporestante(partida) {
-    if (tiempoRestanteM(partida1) >= 1) {
+    if (tiempoRestanteM(partida) >= 1) {
         let intervalo = setInterval(function () {
-            let minutosRestantes = tiempoRestanteM(partida1);
+            let minutosRestantes = tiempoRestanteM(partida);
             console.log(`Quedan ${minutosRestantes} minutos para que comience la partida.`);
             // Si la partida ya comenzó, detén el intervalo
             if (minutosRestantes <= 0) {
@@ -373,7 +525,7 @@ function Tiemporestante(partida) {
     }
     else {
         let intervalo = setInterval(function () {
-            let minutosRestantes = tiempoRestanteS(partida1);
+            let minutosRestantes = tiempoRestanteS(partida);
             console.log(`Quedan ${minutosRestantes} segundos para que comience la partida.`);
             // Si la partida ya comenzó, detén el intervalo
             if (minutosRestantes <= 0) {
