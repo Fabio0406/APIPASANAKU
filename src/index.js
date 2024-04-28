@@ -43,4 +43,6 @@ app.listen(app.get('port'), () =>{
     console.log("servidor corriendo")
 })
 
+export default admin
+
 

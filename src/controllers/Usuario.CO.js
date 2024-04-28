@@ -1,7 +1,11 @@
 import { consul } from "../db.js"
+import admin from "../index.js"
 import { transporter } from "./correo.js"
+import { scheduleJob, scheduledJobs } from "node-schedule"
 /* import client from "./whatsapp.js"
 import QRcode from "qrcode" */
+
+var partidas = {}
 
 export const getCliente = async (req, res) => {
     try {
@@ -13,8 +17,8 @@ export const getCliente = async (req, res) => {
 }
 
 export const post = async (req, res) => {
-    try {   
-        const resp = await consul.query('SELECT * FROM usuario ')    
+    try {
+        const resp = await consul.query('SELECT * FROM usuario ')
         res.status(200).json(resp.rows)
     } catch (error) {
         res.send(error)
@@ -84,14 +88,24 @@ export const invitar = async (req, res) => {
                 console.log('Correo enviado: ' + info.response);
             }
         });
-       
+        const invitado = await consul.query('SELECT token FROM usuario WHERE correo = $1 AND telefono = $2', [correo, telefono])
+        if (invitado.rowCount > 0) {
+            var message = {
+                notification: {
+                    title: 'Has sido Invitado a una partida',
+                    body: 'se te invito a la partida: ' + datos.rows[0].titulo_partida
+                },
+                token: invitado.rows[0].token // token del usuario específico
+            };
+            Sendnotifi(message)
+        }
         /* const numeroDestinatario = '591' + telefono.toString(); // Reemplaza con el número del destinatario
         const chatId = numeroDestinatario + "@c.us";
         const message = "PASANAKU\n" + mensaje
 
         
         client.sendMessage(chatId, message); */
-        
+
         res.status(200).json(resp.command)
     } catch (error) {
         res.send(error)
@@ -154,37 +168,47 @@ export const createCuentas = async (req, res) => {
     }
 }
 
-export const createPartidas = async (req, res) => {
-    try {
-        const { Nombre, Participantes, TiempoPago, otroInput, MontoTotal, moneda, otroInputMoneda } = req.body
-        if (TiempoPago == 'otro' || moneda == 'otro') {
-            const resp = await consul.query('INSERT INTO partida (titulo,montotal, tiempopago, tipomoneda, participantes) VALUES ($1,$2,$3,$4,$5)', [Nombre, MontoTotal, otroInput, otroInputMoneda, Participantes])
-            const partida = await consul.query('SELECT id FROM partida ORDER BY id DESC LIMIT 1')
-            const ressp = await consul.query('INSERT INTO participante (id_user, id_partida, id_rol) VALUES ($1,$2,$3)', [req.params.usser, partida.rows[0].id, 1])
 
-            res.status(200).json(partida.rows[0].id)
+
+export const iniciar = async (req, res) => {
+    try {
+        const partida1 = {
+            id: 1,
+            inicio: calcularInMin(1)
         }
-        if (TiempoPago == 'otro') {
-            const resp = await consul.query('INSERT INTO partida (titulo,montotal, tiempopago, tipomoneda, participantes) VALUES ($1,$2,$3,$4,$5)', [Nombre, MontoTotal, otroInput, moneda, Participantes])
-            const partida = await consul.query('SELECT id FROM partida ORDER BY id DESC LIMIT 1')
-            const ressp = await consul.query('INSERT INTO participante (id_user, id_partida, id_rol) VALUES ($1,$2,$3)', [req.params.usser, partida.rows[0].id, 1])
-            res.status(200).json(partida.rows[0].id)
-        }
-        if (moneda == 'otro') {
-            const resp = await consul.query('INSERT INTO partida (titulo,montotal, tiempopago, tipomoneda, participantes) VALUES ($1,$2,$3,$4,$5)', [Nombre, MontoTotal, TiempoPago, otroInputMoneda, Participantes])
-            const partida = await consul.query('SELECT id FROM partida ORDER BY id DESC LIMIT 1')
-            const ressp = await consul.query('INSERT INTO participante (id_user, id_partida, id_rol) VALUES ($1,$2,$3)', [req.params.usser, partida.rows[0].id, 1])
-            res.status(200).json(partida.rows[0].id)
-        } else {
-            const resp = await consul.query('INSERT INTO partida (titulo,montotal, tiempopago, tipomoneda, participantes) VALUES ($1,$2,$3,$4,$5)', [Nombre, MontoTotal, TiempoPago, moneda, Participantes])
-            const partida = await consul.query('SELECT id FROM partida ORDER BY id DESC LIMIT 1')
-            const ressp = await consul.query('INSERT INTO participante (id_user, id_partida, id_rol) VALUES ($1,$2,$3)', [req.params.usser, partida.rows[0].id, 1])
-            res.status(200).json(partida.rows[0].id)
-        }
+        programarInicioPartida(partida1)
+        Tiemporestante(partida1)
+        res.send("comenso el conteo")
     } catch (error) {
-        res.send(error)
+
     }
 }
+
+export const createPartidas = async (req, res) => {
+    try {
+        const { Nombre, Participantes, TiempoPago, otroInput, MontoTotal, moneda, otroInputMoneda, fechainicio, multa, tiempooferta } = req.body;
+        let tiempoPagoUsar = TiempoPago;
+        let monedaUsar = moneda;
+
+        if (TiempoPago === 'otro' && otroInput) {
+            tiempoPagoUsar = otroInput;
+        }
+
+        if (moneda === 'otro' && otroInputMoneda) {
+            monedaUsar = otroInputMoneda;
+        }
+
+        const fechaorigen = new Date();
+        const resp = await consul.query('INSERT INTO partida (titulo, montotal, tiempopago, tipomoneda, participantes,fechainicio,multa,tiempooferta,fechaorigen) VALUES ($1, $2, $3, $4, $5, $6, $7,$8,$9)', [Nombre, MontoTotal, tiempoPagoUsar, monedaUsar, Participantes, fechainicio, multa, tiempooferta, fechaorigen]);
+        const partida = await consul.query('SELECT * FROM partida ORDER BY id DESC LIMIT 1');
+        const ressp = await consul.query('INSERT INTO participante (id_user, id_partida, id_rol) VALUES ($1, $2, $3)', [req.params.usser, partida.rows[0].id, 1]);
+
+        res.status(200).json(partida.rows[0].id);
+    } catch (error) {
+        res.send(error);
+    }
+};
+
 
 export const updatecuentas = async (req, res) => {
     try {
@@ -226,5 +250,135 @@ export const deletecuenta = async (req, res) => {
         res.send(`Cuenta ${req.params.id} Eliminada`)
     } catch (error) {
         res.send(error)
+    }
+}
+
+
+
+
+
+
+
+// 'partida' es un objeto que contiene la información de la partida
+// 'partida.inicio' es la fecha de inicio de la partida, que debe ser un objeto de tipo Date
+// Crea un temporizador para esta partida
+function programarInicioPartida(partida) {
+    console.log("la partida iniciara : " + partida.inicio); // Imprime la fecha de inicio de la partida
+    let tarea = scheduleJob(partida.inicio, async function () {
+        const usuarios = await consul.query('SELECT u.* FROM public.participante p JOIN public.usuario u ON p.id_user = u.usser WHERE p.id_partida = $1', [partida.id])
+        var tokens = usuarios.rows.map(user => user.token);
+        var message = {
+            notification: {
+                title: 'La partida ' + partida.titulo + ' ha comenzado',
+                body: 'Ya puede hacer tu oferta!!'
+            },
+            tokens: tokens
+        };
+        Sendnotificaciones(message)
+        sigOferta(partida)
+        console.log(`La partida ha comenzado!`);
+    });
+    partidas[partida.id] = tarea;
+}
+
+function sigOferta(partida) {
+    const tiempoDate = calcularInMin(partida.tiempooferta)
+    let tarea = scheduleJob(tiempoDate, async function () {
+        const usuarios = await consul.query('SELECT u.* FROM public.participante p JOIN public.usuario u ON p.id_user = u.usser WHERE p.id_partida = $1', [partida.id])
+        var tokens = usuarios.rows.map(user => user.token);
+        var message = {
+            notification: {
+                title: 'partida ' + partida.titulo ,
+                body: 'Concluyo el tiempo de oferta'
+            },
+            tokens: tokens
+        };
+        Sendnotificaciones(message)
+        // verifico si hubo alguna oferta si no hubo tiene que ser aleatorio la eleccion del ganador
+
+        // aqui tendria que verificar el ganador
+        message = {
+            notification: {
+                title: 'partida ' + partida.titulo ,
+                body: 'has Ganado la oferta!'
+            },
+            tokens: tokens
+        };
+        Sendnotifi(message)
+        // aqui deberia haber una verificacion para saber si es la ultima oferta o no
+        sigOferta(partida)
+        //
+    });
+    partidas[partida.id] = tarea;
+}
+
+function Sendnotificaciones(notificacion) {
+    admin.messaging().sendMulticast(notificacion)
+        .then((response) => {
+            console.log('Notificación enviada correctamente:', response);
+        })
+        .catch((error) => {
+            console.log('Error al enviar la notificación:', error);
+        });
+}
+
+function Sendnotifi(notificacion) {
+    admin.messaging().send(message)
+        .then((response) => {
+            console.log('Notificación enviada correctamente:', response);
+        })
+        .catch((error) => {
+            console.log('Error al enviar la notificación:', error);
+        });
+}
+
+// funcion que calcula el date despues de minutos
+function calcularInMin(minutos) {
+    let ahora = new Date();
+    let minutosDespues = new Date(ahora.getTime() + minutos * 60000); // Esto corresponde a 15 minutos después de la fecha actual
+    console.log(minutosDespues); // Muestra la fecha y hora 15 minutos después
+    return minutosDespues
+}
+
+function tiempoRestanteM(partida) {
+    // Obtiene la fecha actual
+    let ahora = new Date();
+    // Calcula la diferencia en milisegundos
+    let diferencia = partida.inicio.getTime() - ahora.getTime();
+    // Convierte la diferencia a minutos
+    let minutos = Math.floor(diferencia / 1000 / 60);
+    return minutos;
+}
+
+function tiempoRestanteS(partida) {
+    // Obtiene la fecha actual
+    let ahora = new Date();
+    // Calcula la diferencia en milisegundos
+    let diferencia = partida.inicio.getTime() - ahora.getTime();
+    // Convierte la diferencia a minutos
+    let minutos = Math.floor(diferencia / 1000);
+    return minutos;
+}
+
+function Tiemporestante(partida) {
+    if (tiempoRestanteM(partida1) >= 1) {
+        let intervalo = setInterval(function () {
+            let minutosRestantes = tiempoRestanteM(partida1);
+            console.log(`Quedan ${minutosRestantes} minutos para que comience la partida.`);
+            // Si la partida ya comenzó, detén el intervalo
+            if (minutosRestantes <= 0) {
+                clearInterval(intervalo);
+            }
+        }, 60000); // 60000 milisegundos son 1 minuto
+    }
+    else {
+        let intervalo = setInterval(function () {
+            let minutosRestantes = tiempoRestanteS(partida1);
+            console.log(`Quedan ${minutosRestantes} segundos para que comience la partida.`);
+            // Si la partida ya comenzó, detén el intervalo
+            if (minutosRestantes <= 0) {
+                clearInterval(intervalo);
+            }
+        }, 1000); // 60000 milisegundos son 1 minuto
     }
 }

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { UpdateToken, cambiarestado, createCliente, createCuentas, createPartidas, deletecuenta, getCliente, getCuentas, getInvitados, getNotificaciones, getPartidas, invitar, logincliente, updatecuentas, updateusser } from "../controllers/Usuario.CO.js";
+import { UpdateToken, cambiarestado, createCliente, createCuentas, createPartidas, deletecuenta, getCliente, getCuentas, getInvitados, getNotificaciones, getPartidas, iniciar, invitar, logincliente, updatecuentas, updateusser } from "../controllers/Usuario.CO.js";
 
 const router = Router()
 
@@ -32,6 +32,8 @@ router.get('/api/notificacion/:usser',getNotificaciones)
 router.post('/api/estadoinvitacion/:usser/:id_partida/:id_invitacion/:estado',cambiarestado)
 
 router.post('/api/update/:usser',UpdateToken)//actualizar token
+
+router.post('/api/iniciar',iniciar)
 
 
 
