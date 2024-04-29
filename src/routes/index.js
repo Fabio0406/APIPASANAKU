@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { UpdateQr, UpdateToken, cambiarestado, createCliente, createCuentas, createPartidas, deletecuenta, getCliente, getCuentas, getInvitados, getNotificaciones, getPartidas, getQr, getQrG, iniciar, invitar, logincliente, updatecuentas, updateusser } from "../controllers/Usuario.CO.js";
+import { SaveOferta, UpdateQr, UpdateToken, cambiarestado, createCliente, createCuentas, createPartidas, deletecuenta, getCliente, getCuentas, getInvitados, getNotificaciones, getPartidas, getQr, getQrG, iniciar, invitar, logincliente, updatecuentas, updateusser } from "../controllers/Usuario.CO.js";
 import multer from 'multer'
 import {dirname, join} from 'path';
 import {fileURLToPath} from 'url';
@@ -35,7 +35,9 @@ router.post('/api/estadoinvitacion/:usser/:id_partida/:id_invitacion/:estado',ca
 
 router.post('/api/update/:usser',UpdateToken)//actualizar token
 
-router.post('/api/iniciar',iniciar)
+router.post('/api/oferta/:id_partida/:usser/:turno/:monto',SaveOferta)
+
+router.post('/api/iniciar/:id_partida',iniciar)
 
 //----------------------------------------------------
 //--------------------Subir/Devolver QR---------------
