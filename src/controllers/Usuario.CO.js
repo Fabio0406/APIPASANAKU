@@ -24,16 +24,6 @@ export const getCliente = async (req, res) => {
     }
 }
 
-export const post = async (req, res) => {
-    try {
-        const resp = await consul.query('SELECT * FROM usuario ')
-        res.status(200).json(resp.rows)
-    } catch (error) {
-        res.send(error)
-    }
-}
-
-
 export const createCliente = async (req, res) => {
     try {
         const { usser, nombre, contrasena, correo, telefono } = req.body
@@ -131,7 +121,6 @@ export const getCuentas = async (req, res) => {
     }
 }
 
-
 export const getPartidas = async (req, res) => {
     try {
         const resp = await consul.query('SELECT partida.*, estado.nombre AS estado_nombre, COUNT(DISTINCT participante.id_user) AS cantidad_usuarios FROM partida INNER JOIN participante ON partida.id = participante.id_partida INNER JOIN estado ON partida.id_estado = estado.id WHERE partida.id IN (SELECT id_partida FROM participante WHERE id_user = $1 AND id_rol = $2) GROUP BY partida.id, estado.nombre;', [req.params.usser, 1])
@@ -143,7 +132,7 @@ export const getPartidas = async (req, res) => {
 
 export const getNotificaciones = async (req, res) => {
     try {
-        const resp = await consul.query('SELECT invitado.id, invitado.correo, invitado.telefono, invitado.id_partida, estado.nombre AS estado FROM invitado JOIN estado ON invitado.id_estado = estado.id WHERE EXISTS (SELECT 1 FROM usuario WHERE usuario.correo = invitado.correo AND usuario.telefono = invitado.telefono AND usuario.usser = $1);', [req.params.usser])
+        const resp = await consul.query('Select * from notificacion where id_usuario = $1);', [req.params.usser])
         res.status(200).json(resp.rows)
     } catch (error) {
         res.send(error)
@@ -176,10 +165,6 @@ export const createCuentas = async (req, res) => {
     }
 }
 
-
-
-
-
 export const createPartidas = async (req, res) => {
     try {
         const { Nombre, Participantes, TiempoPago, otroInput, MontoTotal, moneda, otroInputMoneda, fechainicio, multa, tiempooferta } = req.body;
@@ -206,7 +191,6 @@ export const createPartidas = async (req, res) => {
         res.send(error);
     }
 };
-
 
 export const updatecuentas = async (req, res) => {
     try {
@@ -340,7 +324,6 @@ export const cambiarestado = async (req, res) => {
     try {
         const { usser, estado, id_partida, id_invitacion } = req.params
         const resp = await consul.query('UPDATE invitado SET id_estado = $1 WHERE id = $2;', [estado, id_invitacion])
-        console.log(estado)
         if (estado == 3) {
             const insertP = await consul.query('INSERT INTO participante (id_user, id_partida, id_rol) VALUES ($1,$2,$3)', [usser, id_partida, 2])
             console.log(insertP.command + " participante añadido")
@@ -360,45 +343,26 @@ export const deletecuenta = async (req, res) => {
     }
 }
 
-
-
-
-
-
-
 // 'partida' es un objeto que contiene la información de la partida
 // 'partida.inicio' es la fecha de inicio de la partida, que debe ser un objeto de tipo Date
 // Crea un temporizador para el INICIO esta partida
 function programarInicioPartida(partida) {
     const tiempoDate = calcularInMin(partida.fechainicio)
+
     console.log("---------------la partida iniciara : " + tiempoDate + "-------------------------"); // Imprime la fecha de inicio de la partida
     let intervalo = setInterval(function () {
         let minutosRestantes = tiempoRestanteS(tiempoDate);
-        console.log(`Quedan ${minutosRestantes} Segundos para que comience la partida.`);
-        // Si la partida ya comenzó, detén el intervalo
+        console.log(`Quedan ${minutosRestantes} Segundos para que comience la partida`);
         if (minutosRestantes <= 0) {
             clearInterval(intervalo);
         }
     }, 1000);
     let tarea = scheduleJob(tiempoDate, async function () {
         console.log("-------------------------Comenzo las ofertas!---------------------------")
-        await consul.query('UPDATE public.partida SET id_estado = 4 WHERE id = $1;', [partida.id])
-        const usuarios = await consul.query('SELECT u.* FROM public.participante p JOIN public.usuario u ON p.id_user = u.usser WHERE p.id_partida = $1', [partida.id])
-        var tokens = usuarios.rows.map(user => user.token);
-        /* var message = {
-            notification: {
-                title: 'La partida ' + partida.titulo + ' ha comenzado',
-                body: 'Ya puede hacer tu oferta para el turno ' + partida.turno_actual + '!!'
-            },
-            tokens: tokens
-        }; 
-        Sendnotificaciones(message)*/
         TempoOferta(partida)
     });
     partidas[partida.id] = tarea;
 }
-
-
 
 function numeroAleatorio(min, max) {// para elegir un usuario aleatorio si es necesario
     // Generar un número aleatorio entre min (incluido) y max (incluido)
@@ -409,7 +373,7 @@ function TempoOferta(partida) {// esto es el temporizador de finalizo la oferta 
     const tiempoDate = calcularInMin(partida.tiempooferta)
     let intervalo = setInterval(function () {
         let minutosRestantes = tiempoRestanteS(tiempoDate);
-        console.log(`Quedan ${minutosRestantes} Segundos .`);
+        console.log(`Quedan ${minutosRestantes} Segundos para que termine la oferta`);
         // Si la partida ya comenzó, detén el intervalo
         if (minutosRestantes <= 0) {
             clearInterval(intervalo);
@@ -417,91 +381,50 @@ function TempoOferta(partida) {// esto es el temporizador de finalizo la oferta 
     }, 1000);
     let tarea = scheduleJob(tiempoDate, async function () {
         console.log("--------------------------Concluyo el tiempo de oferta---------------------")
-        //obtener todos los participantes de una partida
-        const usuarios = await consul.query('SELECT u.* FROM public.participante p JOIN public.usuario u ON p.id_user = u.usser WHERE p.id_partida = $1', [partida.id])
-        var tokens = usuarios.rows.map(user => user.token);
-        /* var message = {
-            notification: {
-                title: 'partida ' + partida.titulo,
-                body: 'Concluyo el tiempo de oferta'
-            },
-            tokens: tokens
-        };
-        Sendnotificaciones(message) */// manda notificacion a todos los participantes avisando que termino la oferta
-        // verifico si hubo alguna oferta si no hubo tiene que ser aleatorio la eleccion del ganador y que no haya ganado antes
-        const ganador = await consul.query('SELECT u.usser AS id_user, u.token, u.nombre, MAX(o.oferta) AS mayor_oferta FROM public.oferta o JOIN public.usuario u ON o.id_user = u.usser WHERE o.id_partida = $1 GROUP BY u.usser, u.token, u.nombre;', [partida.id])
-        let userG = ""
-        if (ganador.rowCount != 0) {// si hay ganador
-            userG = ganador.rows[0].token
-            const cuota = Math.round(ganador.rows[0].mayor_oferta - partida.montotal);
-            const participants = await consul.query('SELECT * FROM public.participante WHERE id_partida = $1 AND id_user != $2;', [partida.id, ganador.rows[0].id_user])
-            await consul.query('INSERT INTO public.pago (id_partida, id_user, turno, monto_pagar, pagado) VALUES ($1, $2, $3, $4, TRUE);', [partida.id, ganador.rows[0].id_user, partida.turno_actual, ganador.rows[0].mayor_oferta])
-            for (let index = 0; index < participants.rowCount; index++) {
-                await consul.query('INSERT INTO public.pago (id_partida, id_user, turno, monto_pagar, pagado) VALUES ($1, $2, $3, $4, FALSE);', [partida.id, participants.rows[index].id_user, partida.turno_actual, cuota])
+        const Ganador = await GanadorM(partida.id)
+        if (Ganador) {
+            console.log("el ganador es :")
+            console.log(Ganador)
+            const cuota = Math.round(Ganador.valor_oferta - partida.montotal);
+            const participantes = await consul.query('SELECT * FROM public.participante WHERE id_partida = $1 AND id_user != $2;', [partida.id, Ganador.usser])
+            await consul.query('INSERT INTO public.pago (id_partida, id_user, turno, monto_pagar, pagado) VALUES ($1, $2, $3, $4, TRUE);', [partida.id, Ganador.usser, partida.turno_actual, Ganador.valor_oferta])
+            console.log("la cantidad de participantes son = " + participantes.rowCount + " y son:")
+            console.log(participantes.rows)
+            for (let index = 0; index <= participantes.rowCount - 1; index++) {
+                await consul.query('INSERT INTO public.pago (id_partida, id_user, turno, monto_pagar, pagado) VALUES ($1, $2, $3, $4, FALSE);', [partida.id, participantes.rows[index].id_user, partida.turno_actual, cuota])
             }
-        } else {//no hay ganador asigna aleatorio
-            const ganadorA = await consul.query('SELECT u.* FROM public.usuario u INNER JOIN public.participante p ON u.usser = p.id_user LEFT JOIN (SELECT DISTINCT id_user FROM public.oferta WHERE id_partida = $1 AND ganador = TRUE) AS ganadores ON u.usser = ganadores.id_user WHERE p.id_partida = $1 AND ganadores.id_user IS NULL;', [partida.id])
-            const numero = numeroAleatorio(0, ganadorA.rowCount - 1);
-            console.log("el numero aleatorio es =" + numero)
-            userG = ganadorA.rows[numero]
-            console.log("userG tiene = ")
-            console.log(userG)
-            const participants = await consul.query('SELECT * FROM public.participante WHERE id_partida = $1 AND id_user != $2;', [partida.id, userG.usser])
-            console.log("los participantes son = ")
-            console.log(participants.rows)
-            const v = await consul.query('INSERT INTO public.pago (id_partida, id_user, turno, monto_pagar, pagado) VALUES ($1, $2, $3, $4, TRUE);', [partida.id, userG.usser, partida.turno_actual, partida.montotal])
-            console.log("pago del ganador = ", v.command)
-            for (let index = 0; index < participants.rowCount; index++) {
-                const p = await consul.query('INSERT INTO public.pago (id_partida, id_user, turno, monto_pagar, pagado) VALUES ($1, $2, $3, $4, FALSE);', [partida.id, participants.rows[index].id_user, partida.turno_actual, partida.montotal])
-                console.log("pago del participante = ", p.command)
-            }
-        }
-        // aqui tendria que verificar el ganador        
-        /*  message = {
-             notification: {
-                 title: 'partida ' + partida.titulo,
-                 body: 'has Ganado la oferta!'
-             },
-             token: userG.token
-         };
-         Sendnotifi(message) */
-
-        // manda notificacion al ganador
-        // verificar si el ganador tiene qr
-        const ganadorQR = await consul.query('SELECT CASE WHEN qr IS NOT NULL THEN TRUE ELSE FALSE END AS tiene_qr FROM public.usuario WHERE usser = $1;', [userG.usser])
-        // si tiene qr notificar a los demas que pueden hacer su pago 
-        if (ganadorQR.rows[0].tiene_qr) {
-            /* var message = {
-                notification: {
-                    title: 'partida ' + partida.titulo,
-                    body: 'El ganador subio su Qr ya puedes pagar'
-                },
-                tokens: tokens
-            };
-            Sendnotificaciones(message) */
-            // notificacion a todos para que hagan su pago ya hay qr
-        } else {// si no tiene, notificar al ganador que debe subir un qr
-            /*  message = {
-                 notification: {
-                     title: 'partida ' + partida.titulo,
-                     body: 'Sube tu QR para que te puedan abonar'
-                 },
-                 token: userG.token
-             };
-             Sendnotifi(message) */
-            // notificar que suba qr
-        }
-        // aqui deberia haber una verificacion para saber si es la ultima oferta o no
-        const resul = await consul.query('SELECT (SELECT COUNT(*) FROM public.participante WHERE id_partida = $1) - COUNT(DISTINCT o.turno) AS turnos_faltantes FROM public.oferta o WHERE o.id_partida = $1;', [partida.id])
-        const cantidad = resul.rows[0].turnos_faltantes
-        if (cantidad != 0) {
-            TempoSigOferta(partida)
         } else {
-            Tempofinalizar(partida, true)
+            const Ganador = await GanadorA(partida.id)
+            console.log("el ganador Aleatorio es :")
+            console.log(Ganador)
+            const participantes = await consul.query('SELECT * FROM public.participante WHERE id_partida = $1 AND id_user != $2;', [partida.id, Ganador.usser])
+            await consul.query('INSERT INTO public.pago (id_partida, id_user, turno, monto_pagar, pagado) VALUES ($1, $2, $3, $4, TRUE);', [partida.id, Ganador.usser, partida.turno_actual, partida.montotal])
+            console.log("la cantidad de participantes son = " + participantes.rowCount + " y son:")
+            console.log(participantes.rows)
+            for (let index = 0; index <= participantes.rowCount - 1; index++) {
+                await consul.query('INSERT INTO public.pago (id_partida, id_user, turno, monto_pagar, pagado) VALUES ($1, $2, $3, $4, FALSE);', [partida.id, participantes.rows[index].id_user, partida.turno_actual, partida.montotal])
+            }
+        }
+        //notificar al ganador
+        //notificar a los participantes
+
+        if (partida.turno_actual == partida.participantes) {
+            Tempofinalizar(partida)
+        } else {
+            TempoSigOferta(partida)
         }
         //
     });
     partidas[partida.id] = tarea;
+}
+async function GanadorM(id_partida) {
+    const VerGanador = await consul.query('SELECT u.*, (SELECT oferta FROM public.oferta WHERE id_partida = $1 AND turno = (SELECT turno_actual FROM public.partida WHERE id = $1) ORDER BY oferta DESC LIMIT 1) AS valor_oferta FROM public.usuario u WHERE usser = (SELECT id_user FROM public.oferta WHERE id_partida = $1 AND turno = (SELECT turno_actual FROM public.partida WHERE id = $1) ORDER BY oferta DESC LIMIT 1);', [id_partida])
+    return VerGanador.rows[0]
+}
+async function GanadorA(id_partida) {
+    const ganadorA = await consul.query('SELECT u.* FROM public.usuario u INNER JOIN public.participante p ON u.usser = p.id_user LEFT JOIN (SELECT DISTINCT id_user FROM public.oferta WHERE id_partida = $1 AND ganador = TRUE) AS ganadores ON u.usser = ganadores.id_user WHERE p.id_partida = $1 AND ganadores.id_user IS NULL;', [id_partida])
+    const numero = numeroAleatorio(0, ganadorA.rowCount - 1);
+    return ganadorA.rows[numero]
 }
 
 function TempoSigOferta(partida) {// esto es el tiempo de pago finalizado y comienzo de la siguiente oferta o si en caso haya multa son 3 dias mas(1 min)
@@ -509,7 +432,7 @@ function TempoSigOferta(partida) {// esto es el tiempo de pago finalizado y comi
     console.log("---------------------------------comenzo el temporizador de tiempo de pago---------------------------")
     let intervalo = setInterval(function () {
         let minutosRestantes = tiempoRestanteS(tiempoDate);
-        console.log(`Quedan ${minutosRestantes} Segundos.`);
+        console.log(`Quedan ${minutosRestantes} Segundos para que concluya el tiempo para pagar`);
         // Si la partida ya comenzó, detén el intervalo
         if (minutosRestantes <= 0) {
             clearInterval(intervalo);
@@ -517,28 +440,36 @@ function TempoSigOferta(partida) {// esto es el tiempo de pago finalizado y comi
     }, 1000);
     let tarea = scheduleJob(tiempoDate, async function () {
         console.log("--------------------------------el tiempo pago concluyo-------------------------------------")
+        //traer todos los usuarios que no han pagado
         const usuarios = await consul.query('SELECT u.* FROM public.usuario u WHERE u.usser IN (SELECT p.id_user FROM public.pago p WHERE p.id_partida = $1 AND p.turno = (SELECT turno_actual FROM public.partida WHERE id = $1) AND p.pagado = FALSE);', [partida.id])
+        console.log("Los usuarios que deben son: ")
+        console.log(usuarios.rows)
         if (usuarios.rowCount > 0) {// si hay usuarios que no han pagado entonces se empiesa a multar pos 3 dias(1 min)
             const tiempo = calcularInMin(1)
-            tiempoesperaM(partida, tiempo, false)
+            await tiempoesperaM(partida, tiempo)
         } else {
             //actuaizo el turno
-            const pasrT = await consul.query('UPDATE public.partida SET turno_actual = turno_actual + 1 WHERE id = $1;'[partida.id])
-            console.log("turno sig = " + pasrT.command)
-            const partN = await consul.query('Select * from partida where id = $1', [partida.id])
-            partida = await partN.rows[0]
+            const parti = await consul.query('SELECT COUNT(*) AS cantidad_usuarios FROM public.participante WHERE id_partida = $1;',[partida.id])
+            if (partida.turno_actual != parti.rows[0].cantidad_usuarios) {
+                const pasarT = await consul.query('UPDATE public.partida SET turno_actual = turno_actual + 1 WHERE id = $1;',[partida.id])
+                console.log("turno sig = " + pasarT.command)
+                const partN = await consul.query('Select * from partida where id = $1', [partida.id])
+                partida = await partN.rows[0]
+                TempoOferta(partida)
+            }else{
+                console.log("-------------La partida ha concluido-----------------")
+            }
         }
-        TempoOferta(partida)
     });
     partidas[partida.id] = tarea;
 }
 
-function Tempofinalizar(partida, Ult) {// esto es el ultimo tiempo de pago finalizado
+function Tempofinalizar(partida) {// esto es el ultimo tiempo de pago finalizado
     const tiempoDate = calcularInMin(partida.tiempopago)
-    console.log("-----------comienza el temporizador Ultima paga-----------------------")
+    console.log("-------------------Comienza el temporizador Ultima paga-----------------------")
     let intervalo = setInterval(function () {
         let minutosRestantes = tiempoRestanteS(tiempoDate);
-        console.log(`Quedan ${minutosRestantes} Segundos para que comience la partida.`);
+        console.log(`Quedan ${minutosRestantes} Segundos para que concluya el ultimo tiempo pago`);
         // Si la partida ya comenzó, detén el intervalo
         if (minutosRestantes <= 0) {
             clearInterval(intervalo);
@@ -547,63 +478,52 @@ function Tempofinalizar(partida, Ult) {// esto es el ultimo tiempo de pago final
     let tarea = scheduleJob(tiempoDate, async function () {
         console.log("--------------------concluyo el temporizador Ultima paga--------------------")
         const usuarios = await consul.query('SELECT u.* FROM public.usuario u WHERE u.usser IN (SELECT p.id_user FROM public.pago p WHERE p.id_partida = $1 AND p.turno = (SELECT turno_actual FROM public.partida WHERE id = $1) AND p.pagado = FALSE);', [partida.id])
-        if (usuarios.rowCount > 0) {// si hay participantes sin pagar
-            tiempoesperaM(partida, tiempo, Ult)
+        console.log("(Ultima vuelta)Los usuarios que deben son: ")
+        console.log(usuarios.rows)
+        if (usuarios.rowCount > 0) {// si hay usuarios que no han pagado entonces se empiesa a multar pos 3 dias(1 min)
+            const tiempo = calcularInMin(1)
+            await tiempoesperaM(partida, tiempo)
         }
-        await consul.query('UPDATE public.partida SET id_estado = 6 WHERE id = $1;', [partida.id])
     });
     partidas[partida.id] = tarea;
 }
 
-async function tiempoesperaM(partida, tiempo, Ult) {// este es el tiempo de espera para la multa
+async function tiempoesperaM(partida, tiempo) {// este es el tiempo de espera para la multa
     console.log("-------------------------------comienza temporizador de Multas----------------------------------")
     let intervalo = setInterval(function () {
         let minutosRestantes = tiempoRestanteS(tiempo);
         console.log(`Quedan ${minutosRestantes} Segundos incremente multa`);
-        // Si la partida ya comenzó, detén el intervalo
         if (minutosRestantes <= 0) {
             clearInterval(intervalo);
         }
     }, 1000);
     const usuarios = await consul.query('SELECT u.* FROM public.usuario u WHERE u.usser IN (SELECT p.id_user FROM public.pago p WHERE p.id_partida = $1 AND p.turno = (SELECT turno_actual FROM public.partida WHERE id = $1) AND p.pagado = FALSE AND p.veces_multado < 3);', [partida.id])
-    var tokens = usuarios.rows.map(user => user.token)
-    let users = usuarios.rows.map(user => user.usser)
-    /* var message = {
-        notification: {
-            title: 'La partida ' + partida.titulo,
-            body: 'Se te ha multado paga para no seguir incrementando!!'
-        },
-        tokens: tokens
-    };
-    Sendnotificaciones(message) */
-    users.forEach(async user => {
-        const pagoIN = await consul.query('UPDATE public.pago SET monto_pagar = monto_pagar + $1 WHERE id_partida = $2 AND id_user = $3 AND turno = $4;', [partida.multa, partida.id, user.usser, partida.turno_actual])
-        const pagoVInc = await consul.query('UPDATE public.pago SET veces_multado = veces_multado + 1 WHERE id_partida = $1 AND id_user = $2 AND turno = $3', [partida.id, user.usser, partida.turno_actual])
+    console.log("(Dentro de la funcion )Los usuarios que deben son: ")
+    console.log(usuarios.rows)
+    for (let index = 0; index <= usuarios.rowCount - 1; index++) {
+        const pagoIN = await consul.query('UPDATE public.pago SET monto_pagar = monto_pagar + $1 WHERE id_partida = $2 AND id_user = $3 AND turno = $4;', [partida.multa, partida.id, usuarios.rows[index].usser, partida.turno_actual])
+        const pagoVInc = await consul.query('UPDATE public.pago SET veces_multado = veces_multado + 1 WHERE id_partida = $1 AND id_user = $2 AND turno = $3', [partida.id, usuarios.rows[index].usser, partida.turno_actual])
         console.log(pagoIN.command + " inc cuota")
         console.log(pagoVInc.command + " Veces de multa")
-    });
-    const us = await consul.query('select * from pago WHERE id_partida = $1 AND turno = $2 AND veces_multado != 3 AND pagado = false', [partida.id, partida.turno_actual])
+    }
     let tarea = scheduleJob(tiempo, async function () {
         console.log("------------------------------concluyo el temporizador de Multas-----------------------------")
-        if (us.rowCount > 0) {// si sigue habiendo personas multadas 
+        const NewUsuarios = await consul.query('SELECT u.* FROM public.usuario u WHERE u.usser IN (SELECT p.id_user FROM public.pago p WHERE p.id_partida = $1 AND p.turno = (SELECT turno_actual FROM public.partida WHERE id = $1) AND p.pagado = FALSE AND p.veces_multado < 3);', [partida.id])
+        console.log("(Dentro de la funcion )Los nuevos usuarios que deben son: ")
+        console.log(NewUsuarios.rows)
+        if (NewUsuarios.rowCount != 0) {
             const tiempo = calcularInMin(1)
-            tiempoesperaM(partida, tiempo, Ult)
-        } else {// ya paso los tres dias
-            if (!Ult) {
-                await consul.query('UPDATE public.partida SET turno_actual = turno_actual + 1 WHERE id = $1;'[partida.id])
+            tiempoesperaM(partida, tiempo)
+        } else {
+            const parti = await consul.query('SELECT COUNT(*) AS cantidad_usuarios FROM public.participante WHERE id_partida = $1;',[partida.id])
+            if (partida.turno_actual != parti.rows[0].cantidad_usuarios) {
+                const pasarT = await consul.query('UPDATE public.partida SET turno_actual = turno_actual + 1 WHERE id = $1;',[partida.id])
+                console.log("turno sig = " + pasarT.command)
                 const partN = await consul.query('Select * from partida where id = $1', [partida.id])
-                partida = partN.rows[0]
-                const participantes = consul.query('SELECT u.* FROM public.usuario u WHERE u.usser IN (SELECT p.id_user FROM public.participante p WHERE p.id_partida = $1 AND NOT EXISTS (SELECT 1 FROM public.oferta o WHERE o.id_partida = p.id_partida AND o.id_user = p.id_user AND o.ganador = TRUE));', [partida.id])
-                var tokens = participantes.rows.map(user => user.token);
-                /* var message = {
-                    notification: {
-                        title: 'La partida ' + partida.titulo + ' ha comenzado',
-                        body: 'Ya puede hacer tu oferta para el turno ' + partida.turno_actual + '!!'
-                    },
-                    tokens: tokens
-                };
-                Sendnotificaciones(message) */
+                partida = await partN.rows[0]
                 TempoOferta(partida)
+            }else{
+                console.log("-------------La partida ha concluido-----------------")
             }
         }
     });
@@ -619,7 +539,6 @@ function Sendnotificaciones(notificacion) {
             console.log('Error al enviar la notificación:', error);
         });
 }
-
 function Sendnotifi(notificacion) {
     admin.messaging().send(message)
         .then((response) => {
@@ -629,52 +548,12 @@ function Sendnotifi(notificacion) {
             console.log('Error al enviar la notificación:', error);
         });
 }
-
-// funcion que calcula el date despues de minutos
-function calcularInMinF(minutos) {
-    let ahora = new Date();
-    console.log("time de ahora: " + ahora.getTime())
-    console.log("time de bd: " + minutos.getTime())
-    let minutosDespues = new Date(ahora.getTime() + minutos.getTime() * 60000);
-    console.log(minutosDespues);
-    return minutosDespues
-}
-
 function calcularInMin(minutos) {
     let ahora = new Date();
     let minutosDespues = new Date(ahora.getTime() + minutos * 60000);
     console.log(minutosDespues);
     return minutosDespues
 }
-function calcularInMinLocal(minuto) {
-    let ahora = new Date();
-    let minutosDespues = new Date(ahora.getTime() + minuto * 60000);
-    // Obtener las partes de la fecha y hora
-    let año = minutosDespues.getFullYear();
-    let mes = String(minutosDespues.getMonth() + 1).padStart(2, '0');
-    let dia = String(minutosDespues.getDate()).padStart(2, '0');
-    let horas = String(minutosDespues.getHours()).padStart(2, '0');
-    let minutos = String(minutosDespues.getMinutes()).padStart(2, '0');
-    let segundos = String(minutosDespues.getSeconds()).padStart(2, '0');
-    let milisegundos = String(minutosDespues.getMilliseconds()).padStart(3, '0');
-
-    // Formatear la fecha y hora
-    let fechaHoraLocalFormatted = `${año}-${mes}-${dia}T${horas}:${minutos}:${segundos}.${milisegundos}Z`;
-    console.log(fechaHoraLocalFormatted);
-    return fechaHoraLocalFormatted;
-}
-
-
-function tiempoRestanteM(partida) {
-    // Obtiene la fecha actual
-    let ahora = new Date();
-    // Calcula la diferencia en milisegundos
-    let diferencia = partida.inicio.getTime() - ahora.getTime();
-    // Convierte la diferencia a minutos
-    let minutos = Math.floor(diferencia / 1000 / 60);
-    return minutos;
-}
-
 function tiempoRestanteS(partida) {
     // Obtiene la fecha actual
     let ahora = new Date();
@@ -683,27 +562,4 @@ function tiempoRestanteS(partida) {
     // Convierte la diferencia a minutos
     let minutos = Math.floor(diferencia / 1000);
     return minutos;
-}
-
-function Tiemporestante(partida) {
-    if (tiempoRestanteM(partida) >= 1) {
-        let intervalo = setInterval(function () {
-            let minutosRestantes = tiempoRestanteM(partida);
-            console.log(`Quedan ${minutosRestantes} minutos para que comience la partida.`);
-            // Si la partida ya comenzó, detén el intervalo
-            if (minutosRestantes <= 0) {
-                clearInterval(intervalo);
-            }
-        }, 60000); // 60000 milisegundos son 1 minuto
-    }
-    else {
-        let intervalo = setInterval(function () {
-            let minutosRestantes = tiempoRestanteS(partida);
-            console.log(`Quedan ${minutosRestantes} segundos para que comience la partida.`);
-            // Si la partida ya comenzó, detén el intervalo
-            if (minutosRestantes <= 0) {
-                clearInterval(intervalo);
-            }
-        }, 1000); // 60000 milisegundos son 1 minuto
-    }
 }

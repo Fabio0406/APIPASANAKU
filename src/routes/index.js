@@ -31,9 +31,9 @@ router.post('/api/invitar', invitar)
 
 router.get('/api/notificacion/:usser',getNotificaciones)
 
-router.post('/api/estadoinvitacion/:usser/:id_partida/:id_invitacion/:estado',cambiarestado)
-
 router.post('/api/update/:usser',UpdateToken)//actualizar token
+
+router.post('/api/estadoinvitacion/:usser/:id_partida/:id_invitacion/:estado',cambiarestado)
 
 router.post('/api/oferta/:id_partida/:usser/:turno/:monto',SaveOferta)
 
