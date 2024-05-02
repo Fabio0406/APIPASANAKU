@@ -322,8 +322,9 @@ export const getQrG = async (req, res) => {
 //-------------------------------------------------------------------
 export const cambiarestado = async (req, res) => {
     try {
-        const { usser, estado, id_partida, id_invitacion } = req.params
+        const { usser, estado, id_partida, id_invitacion, id_noti } = req.params
         const resp = await consul.query('UPDATE invitado SET id_estado = $1 WHERE id = $2;', [estado, id_invitacion])
+        const respp = await consul.query('UPDATE notificacion SET accion = $1 WHERE id = $2;', [true, id_noti])
         if (estado == 3) {
             const insertP = await consul.query('INSERT INTO participante (id_user, id_partida, id_rol) VALUES ($1,$2,$3)', [usser, id_partida, 2])
             console.log(insertP.command + " participante añadido")
