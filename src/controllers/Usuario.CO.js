@@ -132,7 +132,7 @@ export const getPartidas = async (req, res) => {
 
 export const getNotificaciones = async (req, res) => {
     try {
-        const resp = await consul.query('Select * from notificacion where id_usuario = $1);', [req.params.usser])
+        const resp = await consul.query('Select * from notificacion where id_usuario = $1;', [req.params.usser])
         res.status(200).json(resp.rows)
     } catch (error) {
         res.send(error)
